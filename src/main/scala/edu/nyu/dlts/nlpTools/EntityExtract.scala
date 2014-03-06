@@ -2,7 +2,7 @@ package edu.nyu.dlts.nlpTools
 
 import java.io.File
 import java.io.FileInputStream
-import java.sql.{DriverManager, Connection, Statement, ResultSet}
+import java.sql.{DriverManager, Connection, Statement, PreparedStatement, ResultSet}
 import scala.collection.JavaConversions._
 
 class TokenEnts(){
@@ -42,56 +42,54 @@ class TokenEnts(){
 class Db(){
 
   val con = DriverManager.getConnection("jdbc:postgresql://localhost:5432/sfm?user=sfm&password=sfm")
+  val tokenEnts = new TokenEnts()  
   
   def getName(id: Int): String = {
     val statement = con.createStatement()
     val rs = statement.executeQuery("SELECT name FROM ui_twitteruser WHERE id = " + id)
     rs.next()
-    rs.getString(1)
+    val name = rs.getString(1)
+    statement.close
+    name
+  }
+  
+  def getUserIds(): java.util.ArrayList[Int] = {
+    val ids = new java.util.ArrayList[Int]
+    val statement = con.createStatement()
+    val rs = statement.executeQuery("Select id FROM ui_twitteruser")
+    while(rs.next()){ids.add(rs.getInt(1))}
+    statement.close
+    ids
+  }
+
+  def getLocs(id: Integer): java.util.TreeMap[String, Int] = {
+    val map = new java.util.TreeMap[String, Int]
+    val ps: PreparedStatement = con.prepareStatement("SELECT item_text FROM ui_twitteruseritem WHERE twitter_user_id = ?")
+    ps.setInt(1, id)
+    val rs = ps.executeQuery()
+    while(rs.next()){
+      val ents = tokenEnts.getEnts(rs.getString(1))
+      for(ent <- ents){
+	if (map.contains(ent)){
+	  map.put(ent, map.get(ent) + 1)}
+	else{
+	  map.put(ent, 1)
+	}
+      }
+    }
+    ps.close
+    map
   }
 }
 
 object Process{
-  val entMap = new java.util.TreeMap[Int, java.util.TreeMap[String, Int]]
   val db = new Db()
-  
-def main(args: Array[String]){ 
-    val tokenEnts = new TokenEnts()
-    val statement = db.con.createStatement()
-    val rs = statement.executeQuery("SELECT item_text, twitter_user_id FROM ui_twitteruseritem")
-    
-    while(rs.next()){
-      val id = rs.getInt(2)
-      val map = getMap(id)
-      
-      def ents = tokenEnts.getEnts(rs.getString(1))
-      for(ent <- ents){
-	if(map.contains(ent)){
-	  map.put(ent, map.get(ent) + 1)
-	} else {
-	  map.put(ent, 1)
-	}
-      }
-      entMap.put(id, map)
-    }
-    
-    entMap.foreach(ent => 
-      printMap(ent._1, ent._2)
-    )
-  }
-
-  def printMap(id: Int, emap: java.util.TreeMap[String, Int]): Unit = {
-    println(id + ": " + db.getName(id))
-    emap.foreach(kv => println("\t" + kv._1 + " [" + kv._2 + "]"))
-  }
-
-  def getMap(id: Int): java.util.TreeMap[String, Int] = {
-    if(!entMap.contains(id)){
-      new java.util.TreeMap[String, Int]
-    } else {
-      entMap(id)
+  def main(args: Array[String]){ 
+    for(id <- db.getUserIds()){
+      println(db.getName(id))
+      db.getLocs(id).foreach{kv =>
+	println("\t" + kv._1 + " [" + kv._2 + "]")
+      } 
     }
   }
-  
 }
-
