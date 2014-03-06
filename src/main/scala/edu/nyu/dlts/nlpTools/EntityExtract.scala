@@ -82,7 +82,7 @@ class Db(){
   }
 }
 
-object Process{
+object Run{
   val db = new Db()
   def main(args: Array[String]){ 
     for(id <- db.getUserIds()){
