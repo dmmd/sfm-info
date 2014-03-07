@@ -4,6 +4,9 @@ import java.io.File
 import java.io.FileInputStream
 import java.sql.{DriverManager, Connection, Statement, PreparedStatement, ResultSet}
 import scala.collection.JavaConversions._
+import com.typesafe.config._
+
+
 
 class TokenEnts(){
   
@@ -12,13 +15,13 @@ class TokenEnts(){
   import opennlp.tools.tokenize.SimpleTokenizer
   import opennlp.tools.tokenize.Tokenizer
   import opennlp.tools.util.Span
-
-  val model = new File("src/main/resources/en-ner-location.bin")
+  
   val tokenizer = SimpleTokenizer.INSTANCE
-  val finder = new NameFinderME(new TokenNameFinderModel(new FileInputStream(model)))
+  val locFinder = getFinder("src/main/resources/en-ner-location.bin")
+
+  def getFinder(model: String): NameFinderME = {new NameFinderME(new TokenNameFinderModel(new FileInputStream(new File(model))))}
   
-  
-  def getEnts(data: String): java.util.HashSet[String] = {
+  def getEnts(data: String, finder: NameFinderME): java.util.HashSet[String] = {
     val ents = new java.util.HashSet[String]
     val tokenSpans = tokenizer.tokenizePos(data)
     val tokens = Span.spansToStrings(tokenSpans, data)
@@ -40,8 +43,9 @@ class TokenEnts(){
 }
 
 class Db(){
-
-  val con = DriverManager.getConnection("jdbc:postgresql://localhost:5432/sfm?user=sfm&password=sfm")
+  
+  val conf = ConfigFactory.load()
+  val con = DriverManager.getConnection(conf.getString("sfminfo.dbUrl") + ":5433/sfm?user=sfm&password=sfm")
   val tokenEnts = new TokenEnts()  
   
   def getName(id: Int): String = {
@@ -68,7 +72,7 @@ class Db(){
     ps.setInt(1, id)
     val rs = ps.executeQuery()
     while(rs.next()){
-      val ents = tokenEnts.getEnts(rs.getString(1))
+      val ents = tokenEnts.getEnts(rs.getString(1), tokenEnts.locFinder)
       for(ent <- ents){
 	if (map.contains(ent)){
 	  map.put(ent, map.get(ent) + 1)}
